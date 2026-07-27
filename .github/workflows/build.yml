@@ -29,7 +29,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: maven
 
       - name: Zip'i aç
         run: |
