@@ -1,10 +1,11 @@
-name: Build
+name: Maven Build
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+      - master
   pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -12,48 +13,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Repoyu çek
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Zip dosyasını bul ve aç
-        run: |
-          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
-          if [ -z "$ZIP_FILE" ]; then
-            echo "Repo kökünde .zip dosyası bulunamadı!"
-            exit 1
-          fi
-          echo "Bulunan zip: $ZIP_FILE"
-          unzip -o "$ZIP_FILE" -d .
-          echo "Açılan içerik:"
-          ls -la
-
-      - name: JDK 21 kur
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '17'
           cache: maven
 
-      - name: AzySell derle
-        if: hashFiles('AzySell/pom.xml') != ''
-        working-directory: AzySell
-        run: mvn -B clean package
+      - name: Build AzySell
+        working-directory: source/AzySell
+        run: mvn clean package -DskipTests
 
-      - name: AzyWorth derle
-        if: hashFiles('AzyWorth/pom.xml') != ''
-        working-directory: AzyWorth
-        run: mvn -B clean package
+      - name: Build AzyWorth
+        working-directory: source/AzyWorth
+        run: mvn clean package -DskipTests
 
-      - name: Jar dosyalarını topla
-        run: |
-          mkdir -p build-output
-          find . -path ./build-output -prune -o -path "*/target/*.jar" -print | grep -v original- | xargs -I{} cp {} build-output/
-          echo "Toplanan jar'lar:"
-          ls -la build-output
-
-      - name: Jar'ları artifact olarak yükle
+      - name: Upload AzySell JAR
         uses: actions/upload-artifact@v4
         with:
-          name: azy-plugins-jars
-          path: build-output/*.jar
-          if-no-files-found: error
+          name: AzySell
+          path: source/AzySell/target/*.jar
+
+      - name: Upload AzyWorth JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: AzyWorth
+          path: source/AzyWorth/target/*.jar
