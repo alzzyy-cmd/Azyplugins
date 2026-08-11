@@ -1,12 +1,11 @@
-name: Maven Build
+name: build
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
       - master
-  pull_request:
-  workflow_dispatch:
 
 jobs:
   build:
@@ -17,28 +16,45 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
           cache: maven
 
+      - name: Extract plugin source
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP bulunamadı!"
+            exit 1
+          fi
+
+          echo "Bulunan ZIP: $ZIP_FILE"
+
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          echo "ZIP içeriği:"
+          find extracted -maxdepth 4 -type f | sort
+
       - name: Build AzySell
-        working-directory: source/AzySell
-        run: mvn clean package -DskipTests
+        run: |
+          mvn -f extracted/source/AzySell/pom.xml clean package -DskipTests
 
       - name: Build AzyWorth
-        working-directory: source/AzyWorth
-        run: mvn clean package -DskipTests
+        run: |
+          mvn -f extracted/source/AzyWorth/pom.xml clean package -DskipTests
 
-      - name: Upload AzySell JAR
+      - name: Upload AzySell
         uses: actions/upload-artifact@v4
         with:
           name: AzySell
-          path: source/AzySell/target/*.jar
+          path: extracted/source/AzySell/target/*.jar
 
-      - name: Upload AzyWorth JAR
+      - name: Upload AzyWorth
         uses: actions/upload-artifact@v4
         with:
           name: AzyWorth
-          path: source/AzyWorth/target/*.jar
+          path: extracted/source/AzyWorth/target/*.jar
