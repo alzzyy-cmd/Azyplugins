@@ -1,10 +1,11 @@
-name: Build Plugins
+name: Build Azy Plugins
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
+      - master
 
 jobs:
   build:
@@ -14,87 +15,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Find and Extract plugin source
-        shell: bash
-        run: |
-          set -e
-
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "HATA: ZIP dosyasi bulunamadi!"
-            exit 1
-          fi
-
-          echo "Bulunan ZIP: $ZIP_FILE"
-
-          mkdir -p source
-          unzip -o "$ZIP_FILE" -d source
-
-          echo "ZIP acildi:"
-          find source -maxdepth 4 -type f | head -100
-
       - name: Setup Java 21
         uses: actions/setup-java@v5
         with:
+          distribution: temurin
           java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
 
-      - name: Find Maven projects
+      - name: Extract ZIP
         shell: bash
         run: |
-          echo "Bulunan pom.xml dosyalari:"
-          find source -name pom.xml -print
+          set -e
+
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ZIP bulunamadı!"
+            exit 1
+          fi
+
+          rm -rf .build
+          mkdir .build
+          unzip -q "$ZIP_FILE" -d .build
+
+          echo "ZIP içeriği:"
+          find .build -maxdepth 4 -type f | sort | head -100
+
+      - name: Detect Maven project root
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f ".build/source/AzySell/pom.xml" ]; then
+            echo "PROJECT_ROOT=.build/source" >> "$GITHUB_ENV"
+
+          elif [ -f ".build/AzySell/pom.xml" ]; then
+            echo "PROJECT_ROOT=.build" >> "$GITHUB_ENV"
+
+          else
+            echo "AzySell pom.xml bulunamadı!"
+            find .build -name pom.xml -print
+            exit 1
+          fi
 
       - name: Build AzySell
-        shell: bash
         run: |
-          set -e
-
-          SELL_POM=$(find source -type f -name pom.xml | grep -i "sell" | head -n 1)
-
-          if [ -z "$SELL_POM" ]; then
-            echo "AzySell pom.xml bulunamadi!"
-            exit 1
-          fi
-
-          SELL_DIR=$(dirname "$SELL_POM")
-
-          echo "AzySell dizini: $SELL_DIR"
-
-          cd "$SELL_DIR"
-          mvn clean package -DskipTests
+          mvn -B -f "$PROJECT_ROOT/AzySell/pom.xml" clean package -DskipTests
 
       - name: Build AzyWorth
-        shell: bash
         run: |
-          set -e
-
-          WORTH_POM=$(find source -type f -name pom.xml | grep -i "worth" | head -n 1)
-
-          if [ -z "$WORTH_POM" ]; then
-            echo "AzyWorth pom.xml bulunamadi!"
-            exit 1
-          fi
-
-          WORTH_DIR=$(dirname "$WORTH_POM")
-
-          echo "AzyWorth dizini: $WORTH_DIR"
-
-          cd "$WORTH_DIR"
-          mvn clean package -DskipTests
+          mvn -B -f "$PROJECT_ROOT/AzyWorth/pom.xml" clean package -DskipTests
 
       - name: Upload AzySell
         uses: actions/upload-artifact@v4
         with:
           name: AzySell
-          path: source/**/target/*.jar
+          path: .build/**/AzySell/target/*.jar
           if-no-files-found: error
 
       - name: Upload AzyWorth
         uses: actions/upload-artifact@v4
         with:
           name: AzyWorth
-          path: source/**/target/*.jar
+          path: .build/**/AzyWorth/target/*.jar
           if-no-files-found: error
