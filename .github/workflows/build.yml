@@ -1,20 +1,11 @@
-name: Build AzyPlugins
-
-# Bu workflow, repoya attığın AzyPlugins-updated.zip dosyasını KENDİSİ açar.
-# Sen zipi hiç açmadan repoya (root'a) atman yeterli.
-#
-# Build sırası önemli çünkü AzySell -> AzyWorth'e derleme zamanı bağımlı:
-#   1) AzyWorth  -> mvn install (jar'ı lokal Maven deposuna kurar)
-#   2) AzyShop   -> mvn package (bağımsız)
-#   3) AzySell   -> mvn package (install edilmiş AzyWorth'ü bulur)
+name: Build
 
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - "AzyPlugins-updated.zip"
-      - ".github/workflows/build.yml"
-  workflow_dispatch: {}
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -24,44 +15,45 @@ jobs:
       - name: Repoyu çek
         uses: actions/checkout@v4
 
+      - name: Zip dosyasını bul ve aç
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "Repo kökünde .zip dosyası bulunamadı!"
+            exit 1
+          fi
+          echo "Bulunan zip: $ZIP_FILE"
+          unzip -o "$ZIP_FILE" -d .
+          echo "Açılan içerik:"
+          ls -la
+
       - name: JDK 21 kur
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
-
-      - name: Zip'i aç
-        run: |
-          if [ ! -f "AzyPlugins-updated.zip" ]; then
-            echo "AzyPlugins-updated.zip repo kök dizininde bulunamadı!"
-            exit 1
-          fi
-          unzip -o AzyPlugins-updated.zip -d extracted
-
-      - name: AzyWorth derle ve local repoya kur
-        working-directory: extracted/AzyWorth
-        run: mvn -B clean install
-
-      - name: AzyShop derle
-        working-directory: extracted/AzyShop
-        run: mvn -B clean package
+          java-version: '21'
+          cache: maven
 
       - name: AzySell derle
-        working-directory: extracted/AzySell
+        if: hashFiles('AzySell/pom.xml') != ''
+        working-directory: AzySell
         run: mvn -B clean package
 
-      - name: Jar'ları topla
+      - name: AzyWorth derle
+        if: hashFiles('AzyWorth/pom.xml') != ''
+        working-directory: AzyWorth
+        run: mvn -B clean package
+
+      - name: Jar dosyalarını topla
         run: |
           mkdir -p build-output
-          find extracted -type f -name "*.jar" \
-            -path "*/target/*" \
-            ! -name "original-*.jar" \
-            -exec cp {} build-output/ \;
+          find . -path ./build-output -prune -o -path "*/target/*.jar" -print | grep -v original- | xargs -I{} cp {} build-output/
+          echo "Toplanan jar'lar:"
           ls -la build-output
 
       - name: Jar'ları artifact olarak yükle
         uses: actions/upload-artifact@v4
         with:
-          name: AzyPlugins-jars
+          name: azy-plugins-jars
           path: build-output/*.jar
           if-no-files-found: error
